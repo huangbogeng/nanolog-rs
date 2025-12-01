@@ -5,8 +5,8 @@
 */
 
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// 字节缓冲区实现
 ///

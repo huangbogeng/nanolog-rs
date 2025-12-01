@@ -12,19 +12,19 @@ use std::io;
 pub enum Error {
     /// 初始化错误，日志器已经被初始化
     AlreadyInitialized,
-    
+
     /// 未初始化错误，日志器尚未初始化
     NotInitialized,
-    
+
     /// I/O错误，如文件写入失败
     Io(io::Error),
-    
+
     /// 队列错误，如队列已满或为空
     Queue(&'static str),
-    
+
     /// 配置错误，如无效的配置值
     Config(&'static str),
-    
+
     /// 内存错误，如缓冲区溢出
     Memory(&'static str),
 }
@@ -63,18 +63,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_error_display() {
         let err = Error::AlreadyInitialized;
         assert_eq!(err.to_string(), "logger already initialized");
-        
+
         let err = Error::NotInitialized;
         assert_eq!(err.to_string(), "logger not initialized");
-        
+
         let err = Error::Config("invalid level");
         assert_eq!(err.to_string(), "configuration error: invalid level");
-        
+
         let err = Error::Memory("buffer overflow");
         assert_eq!(err.to_string(), "memory error: buffer overflow");
     }

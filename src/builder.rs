@@ -4,16 +4,16 @@
 该模块提供了现代化的Builder模式，使用户能够以流畅的方式配置和创建日志器实例。
 */
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use std::path::Path;
 
 use crate::Level;
 
-use crate::sink::Sink;
+use crate::error::Error;
 use crate::format::Formatter;
 use crate::logger::AsyncLogger;
-use crate::error::Error;
+use crate::sink::Sink;
 
 /// 构建器模式配置
 #[derive(Clone)]
@@ -125,9 +125,13 @@ impl AsyncLoggerBuilder {
 
     /// 构建AsyncLogger实例
     pub fn build(self) -> Result<AsyncLogger, Error> {
-        let formatter = self.formatter.unwrap_or_else(|| Arc::new(crate::format::DefaultFormatter::new()));
-        let sink = self.sink.unwrap_or_else(|| Arc::new(crate::sink::ConsoleSink::new()));
-        
+        let formatter = self
+            .formatter
+            .unwrap_or_else(|| Arc::new(crate::format::DefaultFormatter::new()));
+        let sink = self
+            .sink
+            .unwrap_or_else(|| Arc::new(crate::sink::ConsoleSink::new()));
+
         Ok(AsyncLogger::new(
             self.level,
             formatter,
@@ -143,7 +147,6 @@ impl AsyncLoggerBuilder {
 mod tests {
     use super::*;
     use std::time::Duration;
-
 
     #[test]
     fn test_builder_creation() {
@@ -163,7 +166,7 @@ mod tests {
             .with_debug_level()
             .with_console_output()
             .with_simple_formatting();
-        
+
         assert_eq!(builder.level, Level::Debug);
         assert!(builder.formatter.is_some());
         assert!(builder.sink.is_some());
@@ -171,10 +174,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_builder_build() {
-        let result = AsyncLoggerBuilder::new()
-            .level(Level::Info)
-            .build();
-        
+        let result = AsyncLoggerBuilder::new().level(Level::Info).build();
+
         assert!(result.is_ok());
     }
 
@@ -182,11 +183,11 @@ mod tests {
     fn test_builder_all_convenience_methods() {
         let builder = AsyncLoggerBuilder::new()
             .with_debug_level()
-            .with_trace_level()  // This should override debug level
+            .with_trace_level() // This should override debug level
             .with_json_formatting()
-            .with_simple_formatting()  // This should override json formatting
+            .with_simple_formatting() // This should override json formatting
             .with_console_output();
-        
+
         assert_eq!(builder.level, Level::Trace);
         assert!(builder.formatter.is_some());
         assert!(builder.sink.is_some());
@@ -198,7 +199,7 @@ mod tests {
             .queue_capacity(2000)
             .batch_size(50)
             .flush_interval(Duration::from_millis(200));
-        
+
         // We can't directly access the fields, but we can verify the builder was configured
         assert_eq!(builder.queue_capacity, 2000);
         assert_eq!(builder.batch_size, 50);
@@ -215,7 +216,7 @@ mod tests {
             .batch_size(50)
             .flush_interval(Duration::from_millis(200))
             .build();
-        
+
         assert!(result.is_ok());
     }
 }

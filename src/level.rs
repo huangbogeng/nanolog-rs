@@ -24,7 +24,7 @@ impl Level {
     pub fn as_str(&self) -> &'static str {
         match self {
             Level::Trace => "TRACE",
-            Level::Debug => "DEBUG", 
+            Level::Debug => "DEBUG",
             Level::Info => "INFO",
             Level::Warn => "WARN",
             Level::Error => "ERROR",
@@ -34,7 +34,7 @@ impl Level {
 
 impl FromStr for Level {
     type Err = ();
-    
+
     /// 从字符串解析级别
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
@@ -53,4 +53,3 @@ impl fmt::Display for Level {
         write!(f, "{}", self.as_str())
     }
 }
-

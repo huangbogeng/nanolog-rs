@@ -14,6 +14,7 @@ pub mod error;
 pub mod format;
 pub mod level;
 pub mod logger;
+pub mod macros;
 pub mod record;
 pub mod sink;
 
@@ -21,7 +22,9 @@ pub mod sink;
 pub use crate::builder::AsyncLoggerBuilder;
 pub use crate::format::{DefaultFormatter, Formatter, JsonFormatter, SimpleFormatter};
 pub use crate::level::Level;
-pub use crate::logger::{global_logger, init_global_logger, AsyncLogger, GlobalLogger};
+pub use crate::logger::{AsyncLogger, GlobalLogger, global_logger, init_global_logger};
+// 注意：宏通过#[macro_export]自动导出，无需在此处重新导出
+// pub use crate::macros::*;
 pub use crate::record::Record;
 pub use crate::sink::{CompositeSink, ConsoleSink, FileSink, MemorySink, NullSink, Sink};
 
@@ -74,7 +77,7 @@ mod tests {
         // 测试API是否能正常编译
         let formatter = Arc::new(DefaultFormatter::new());
         let sink = Arc::new(ConsoleSink::new());
-        
+
         let logger = Arc::new(AsyncLogger::new(
             Level::Debug,
             formatter,
@@ -83,7 +86,7 @@ mod tests {
             10,
             Duration::from_millis(100),
         ));
-        
+
         // 验证基本类型可以正常编译
         let record = Record::new(
             Level::Info,
@@ -92,10 +95,10 @@ mod tests {
             1,
             "Test message".to_string(),
         );
-        
+
         // 测试日志记录功能
         assert!(logger.log(record).is_ok());
-        
+
         // 测试关闭功能
         assert!(logger.shutdown().await.is_ok());
     }
