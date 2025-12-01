@@ -1,0 +1,12 @@
+# Allow unwrap/expect in tests
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 20
+
+# Enum variant size threshold (in bytes)
+enum-variant-size-threshold = 200
+
+# Minimum supported Rust version
+msrv = "1.74"
