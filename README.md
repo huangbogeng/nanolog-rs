@@ -123,6 +123,56 @@ Output destinations for log messages:
 - Network sinks (planned)
 - Custom sinks via the `Sink` trait
 
+### Logging Macros
+
+NanoLog-rs provides convenient logging macros similar to the popular `log` crate:
+
+- `error!` - For error-level messages
+- `warn!` - For warning-level messages
+- `info!` - For informational messages
+- `debug!` - For debugging messages
+- `trace!` - For trace-level messages
+
+These macros require a global logger to be initialized first. They automatically check if the log level is enabled before formatting the message, avoiding unnecessary work. This lazy evaluation ensures minimal performance impact when logging is disabled.
+
+Example usage:
+```rust
+use nanolog_rs::{AsyncLoggerBuilder, Level, init_global_logger};
+
+// Initialize logger
+let logger = AsyncLoggerBuilder::new()
+    .level(Level::Trace)
+    .build()?;
+init_global_logger(logger)?;
+
+// Use macros
+error!("This is an error message");
+warn!("This is a warning message");
+info!("This is an info message");
+debug!("This is a debug message");
+trace!("This is a trace message");
+
+// With parameters
+let x = 42;
+info!("The answer is {}", x);
+
+// With target
+info!(target: "network", "Network connection established");
+```
+
+#### Performance Benefits
+
+The macros implement lazy evaluation, meaning that string formatting only occurs if the log level is enabled. This avoids expensive string formatting operations when logging is disabled:
+
+```rust
+// This complex formatting operation is only executed if debug level is enabled
+debug!("User {} performed action {} with parameters {:?}", user_id, action, params);
+```
+
+#### Advanced Usage
+
+See the `examples/macros_advanced_example.rs` for more advanced usage patterns including conditional logging, loop logging, and performance-critical logging scenarios.
+
 ## Advanced Usage
 
 ### Custom Formatter
