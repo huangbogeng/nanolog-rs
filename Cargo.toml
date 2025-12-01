@@ -1,0 +1,21 @@
+[package]
+name = "nanolog-rs"
+version = "0.1.0"
+edition = "2024"
+description = "High performance asynchronous logging library for high-frequency trading systems"
+license = "MIT"
+
+[dependencies]
+tokio = { version = "1.32.0", features = ["full"] }
+crossbeam-queue = "0.3.8"
+crossbeam-epoch = "0.9.14"
+lazy_static = "1.4.0"
+thiserror = "1.0.47"
+async-trait = "0.1.73"
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "logger_benchmark"
+harness = false
