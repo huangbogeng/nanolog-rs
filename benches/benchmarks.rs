@@ -1,6 +1,6 @@
 //! 性能基准测试
-
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use std::hint::black_box;
+use criterion::{criterion_group, criterion_main, Criterion};
 use nanolog_rs::{
     buffer::{BufferPool, ByteBuffer},
     AsyncLogger, DefaultFormatter, Formatter, Level, MemorySink, Record,

@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use nanolog_rs::buffer::BufferPool;
+use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,7 +22,7 @@ fn benchmark_buffer_pool(c: &mut Criterion) {
         let pool = BufferPool::new(100, 1000);
         b.iter(|| {
             let buffer = black_box(pool.acquire());
-            if let Some(mut buffer) = Arc::get_mut(&mut buffer.clone()) {
+            if let Some(buffer) = Arc::get_mut(&mut buffer.clone()) {
                 let _ = buffer.write_str(black_box("This is a test log message with some data"));
                 let _ = buffer.write_str(&format!(" {}", black_box(42)));
             }
