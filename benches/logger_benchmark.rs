@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use nanolog_rs::buffer::BufferPool;
 use std::hint::black_box;
 use std::sync::Arc;
@@ -14,7 +14,8 @@ fn benchmark_buffer_pool(c: &mut Criterion) {
         b.iter(|| {
             // 获取并归还缓冲区
             let buffer = black_box(pool.acquire());
-            black_box(pool.release(buffer));
+            pool.release(buffer);
+            black_box(());
         });
     });
 
@@ -26,7 +27,8 @@ fn benchmark_buffer_pool(c: &mut Criterion) {
                 let _ = buffer.write_str(black_box("This is a test log message with some data"));
                 let _ = buffer.write_str(&format!(" {}", black_box(42)));
             }
-            black_box(pool.release(buffer));
+            pool.release(buffer);
+            black_box(());
         });
     });
 

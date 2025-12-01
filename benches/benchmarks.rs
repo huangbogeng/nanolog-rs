@@ -1,10 +1,10 @@
 //! 性能基准测试
-use std::hint::black_box;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use nanolog_rs::{
-    buffer::{BufferPool, ByteBuffer},
     AsyncLogger, DefaultFormatter, Formatter, Level, MemorySink, Record,
+    buffer::{BufferPool, ByteBuffer},
 };
+use std::hint::black_box;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,7 +25,7 @@ fn bench_byte_buffer(c: &mut Criterion) {
         let data = vec![0u8; 100];
         b.iter(|| {
             let mut buffer = ByteBuffer::new(1024);
-            buffer.write_bytes(&data).unwrap();
+            let _ = buffer.write_bytes(&data);
             black_box(buffer);
         });
     });
@@ -71,8 +71,8 @@ fn bench_buffer_pool(c: &mut Criterion) {
                 pool2.release(buffer);
             });
 
-            handle1.join().unwrap();
-            handle2.join().unwrap();
+            let _ = handle1.join();
+            let _ = handle2.join();
         });
     });
 
@@ -116,14 +116,16 @@ fn bench_logging(c: &mut Criterion) {
                 line!(),
                 "Benchmark log message".to_string(),
             );
-            logger.log(record).unwrap();
+            let _ = logger.log(record);
         });
 
         // 关闭日志器以释放资源
         let logger = logger;
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
-            logger.shutdown().await.unwrap();
-        });
+        if let Ok(runtime) = tokio::runtime::Runtime::new() {
+            runtime.block_on(async {
+                let _ = logger.shutdown().await;
+            });
+        }
     });
 
     group.bench_function("batch_logging", |b| {
@@ -145,15 +147,17 @@ fn bench_logging(c: &mut Criterion) {
                     line!(),
                     format!("Log message {}", i),
                 );
-                logger.log(record).unwrap();
+                let _ = logger.log(record);
             }
         });
 
         // 关闭日志器以释放资源
         let logger = logger;
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
-            logger.shutdown().await.unwrap();
-        });
+        if let Ok(runtime) = tokio::runtime::Runtime::new() {
+            runtime.block_on(async {
+                let _ = logger.shutdown().await;
+            });
+        }
     });
 
     group.finish();
@@ -235,22 +239,25 @@ fn bench_concurrent(c: &mut Criterion) {
                             line!(),
                             format!("Thread log {}", i),
                         );
-                        logger.log(record).unwrap();
+                        let _ = logger.log(record);
                     }
                 });
                 handles.push(handle);
             }
 
             for handle in handles {
-                handle.join().unwrap();
+                let _ = handle.join();
             }
         });
 
         // 关闭日志器以释放资源
-        let logger = Arc::try_unwrap(logger).ok().unwrap();
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
-            logger.shutdown().await.unwrap();
-        });
+        if let Ok(logger) = Arc::try_unwrap(logger) {
+            if let Ok(runtime) = tokio::runtime::Runtime::new() {
+                runtime.block_on(async {
+                    let _ = logger.shutdown().await;
+                });
+            }
+        }
     });
 
     group.finish();
