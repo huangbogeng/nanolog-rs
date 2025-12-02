@@ -221,14 +221,16 @@ impl BufferPool {
 
     /// 释放缓冲区回池中
     pub fn release(&self, buffer: Arc<ByteBuffer>) {
+        // 检查当前池大小
         let current = self.current_size.load(Ordering::Relaxed);
         if current < self.max_pool_size {
-            // 清空缓冲区内容以便重用
-            if let Some(buf) = Arc::get_mut(&mut buffer.clone()) {
+            // 尝试清空缓冲区内容以便重用
+            // 注意：只有当没有其他强引用时，Arc::get_mut才能成功
+            if let Some(buf) = Arc::get_mut(&mut Arc::clone(&buffer)) {
                 buf.clear();
             }
 
-            // 添加到池中（SegQueue的push总是成功）
+            // 添加到池中
             self.buffers.push(buffer);
             self.current_size.fetch_add(1, Ordering::Relaxed);
         }

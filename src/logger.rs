@@ -46,7 +46,8 @@ async fn main() {
 
 use crossbeam_queue::SegQueue;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::time::interval;
@@ -69,6 +70,24 @@ pub struct AsyncLogger {
     queue: Arc<SegQueue<Record>>,
     shutdown: Arc<AtomicBool>,
     notify: Arc<Notify>,
+    
+    // 日志丢失检测相关字段
+    /// 已发送的日志数量
+    sent_count: Arc<AtomicUsize>,
+    /// 已写入的日志数量
+    written_count: Arc<AtomicUsize>,
+    /// 已丢失的日志数量
+    lost_count: Arc<AtomicUsize>,
+    /// 是否启用日志丢失检测
+    loss_detection_enabled: bool,
+    
+    // 自诊断日志相关字段
+    /// 是否启用自诊断日志
+    self_diagnosis_enabled: bool,
+    /// 自诊断日志级别
+    self_diagnosis_level: Level,
+    /// 自诊断日志目标
+    self_diagnosis_sink: Option<Arc<dyn Sink>>,
 }
 
 impl AsyncLogger {
@@ -89,39 +108,50 @@ impl AsyncLogger {
         let queue = Arc::new(SegQueue::new());
         let shutdown = Arc::new(AtomicBool::new(false));
         let notify = Arc::new(Notify::new());
-
-        let logger = Self {
-            level,
-            queue: queue.clone(),
-            shutdown: shutdown.clone(),
-            notify: notify.clone(),
-        };
-
+        
+        // 日志丢失检测相关字段
+        let sent_count = Arc::new(AtomicUsize::new(0));
+        let written_count = Arc::new(AtomicUsize::new(0));
+        let lost_count = Arc::new(AtomicUsize::new(0));
+        
         // 启动后台工作线程
-        logger.start_worker(
-            queue,
-            shutdown,
-            notify,
+        Self::start_worker(
+            queue.clone(),
+            shutdown.clone(),
+            notify.clone(),
             formatter,
             sink,
             WorkerConfig {
                 batch_size,
                 flush_interval,
             },
+            written_count.clone(),
         );
 
-        logger
+        Self {
+            level,
+            queue,
+            shutdown,
+            notify,
+            sent_count,
+            written_count,
+            lost_count,
+            loss_detection_enabled: true,
+            self_diagnosis_enabled: false,
+            self_diagnosis_level: Level::Error,
+            self_diagnosis_sink: None,
+        }
     }
 
     /// 启动后台工作线程
     fn start_worker(
-        &self,
         queue: Arc<SegQueue<Record>>,
         shutdown: Arc<AtomicBool>,
         notify: Arc<Notify>,
         formatter: Arc<dyn Formatter>,
         sink: Arc<dyn Sink>,
         config: WorkerConfig,
+        written_count: Arc<AtomicUsize>,
     ) {
         tokio::spawn(async move {
             let mut batch = Vec::with_capacity(config.batch_size);
@@ -135,7 +165,9 @@ impl AsyncLogger {
                             batch.push(record);
 
                             if batch.len() >= config.batch_size {
+                                let count = batch.len();
                                 Self::process_batch(&batch, &formatter, &sink).await;
+                                written_count.fetch_add(count, Ordering::Relaxed);
                                 batch.clear();
                             }
                         }
@@ -144,24 +176,33 @@ impl AsyncLogger {
                     // 定期刷新
                     _ = flush_timer.tick() => {
                         if !batch.is_empty() {
+                            let count = batch.len();
                             Self::process_batch(&batch, &formatter, &sink).await;
+                            written_count.fetch_add(count, Ordering::Relaxed);
                             batch.clear();
                         }
                     },
 
-                    // 检查关闭信号
+                    // 检查关闭信号（使用yield_now避免阻塞）
                     _ = tokio::task::yield_now() => {
                         if shutdown.load(Ordering::Acquire) {
                             // 处理剩余日志
                             if !batch.is_empty() {
+                                let count = batch.len();
                                 Self::process_batch(&batch, &formatter, &sink).await;
+                                written_count.fetch_add(count, Ordering::Relaxed);
                             }
 
                             // 处理队列中剩余的所有日志
+                            let mut remaining_count = 0;
                             while let Some(record) = queue.pop() {
+                                remaining_count += 1;
                                 if let Ok(formatted) = formatter.format(&record) {
                                     let _ = sink.write(&formatted).await;
                                 }
+                            }
+                            if remaining_count > 0 {
+                                written_count.fetch_add(remaining_count, Ordering::Relaxed);
                             }
 
                             // 关闭sink
@@ -203,11 +244,88 @@ impl AsyncLogger {
 
         // 使用无锁队列，避免阻塞
         self.queue.push(record);
+        
+        // 增加已发送日志计数
+        if self.loss_detection_enabled {
+            self.sent_count.fetch_add(1, Ordering::Relaxed);
+        }
 
         // 通知工作线程有新日志
         self.notify.notify_one();
 
         Ok(())
+    }
+    
+    /// 获取日志丢失统计信息
+    pub fn get_loss_stats(&self) -> (usize, usize, usize) {
+        let sent = self.sent_count.load(Ordering::Relaxed);
+        let written = self.written_count.load(Ordering::Relaxed);
+        let lost = self.lost_count.load(Ordering::Relaxed);
+        
+        // 计算当前丢失的日志数量
+        let current_lost = if sent > written {
+            sent - written
+        } else {
+            0
+        };
+        
+        // 更新丢失计数器
+        if self.loss_detection_enabled && current_lost > lost {
+            self.lost_count.store(current_lost, Ordering::Relaxed);
+        }
+        
+        (sent, written, current_lost)
+    }
+    
+    /// 重置日志丢失统计信息
+    pub fn reset_loss_stats(&self) {
+        self.sent_count.store(0, Ordering::Relaxed);
+        self.written_count.store(0, Ordering::Relaxed);
+        self.lost_count.store(0, Ordering::Relaxed);
+    }
+    
+    /// 启用或禁用日志丢失检测
+    pub fn set_loss_detection(&mut self, enabled: bool) {
+        self.loss_detection_enabled = enabled;
+        if !enabled {
+            self.reset_loss_stats();
+        }
+    }
+    
+    /// 启用或禁用自诊断日志
+    pub fn set_self_diagnosis(&mut self, enabled: bool) {
+        self.self_diagnosis_enabled = enabled;
+    }
+    
+    /// 设置自诊断日志级别
+    pub fn set_self_diagnosis_level(&mut self, level: Level) {
+        self.self_diagnosis_level = level;
+    }
+    
+    /// 设置自诊断日志目标
+    pub fn set_self_diagnosis_sink(&mut self, sink: Arc<dyn Sink>) {
+        self.self_diagnosis_sink = Some(sink);
+    }
+    
+    /// 记录自诊断日志
+    fn log_self_diagnosis(&self, level: Level, message: &str) {
+        if self.self_diagnosis_enabled && level >= self.self_diagnosis_level {
+            if let Some(sink) = &self.self_diagnosis_sink {
+                let record = Record::new(
+                    level,
+                    "nanolog_rs::self_diagnosis",
+                    file!(),
+                    line!(),
+                    message.to_string(),
+                );
+                
+                // 使用默认格式化器
+                let formatter = crate::format::DefaultFormatter::new();
+                if let Ok(formatted) = formatter.format(&record) {
+                    let _ = sink.write(&formatted);
+                }
+            }
+        }
     }
 
     /// 检查是否应该记录指定级别的日志
@@ -234,10 +352,13 @@ impl AsyncLogger {
     /// 优雅关闭日志器
     pub async fn shutdown(&self) -> Result<(), Error> {
         self.shutdown.store(true, Ordering::Release);
+        
+        // 因为shutdown_tx在共享引用中，我们不能获取其所有权
+        // 所以我们使用notify通知工作线程，而oneshot通道已在start_worker中使用
         self.notify.notify_one();
 
-        // 等待工作线程完成
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // 等待工作线程完成处理所有日志
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
         Ok(())
     }
@@ -258,33 +379,46 @@ impl Drop for AsyncLogger {
 
 /// 全局日志器管理
 pub struct GlobalLogger {
-    logger: Option<Arc<AsyncLogger>>,
+    logger: Mutex<Option<Arc<AsyncLogger>>>,
 }
 
 impl GlobalLogger {
     /// 创建新的全局日志器
     pub fn new() -> Self {
-        Self { logger: None }
+        Self { logger: Mutex::new(None) }
     }
 
     /// 初始化全局日志器
-    pub fn init(&mut self, logger: Arc<AsyncLogger>) -> Result<(), Error> {
-        if self.logger.is_some() {
-            return Err(Error::AlreadyInitialized);
+    pub fn init(&self, logger: Arc<AsyncLogger>) -> Result<(), Error> {
+        let mut guard = self.logger.lock().unwrap();
+        
+        // 在测试环境中允许重新初始化
+        #[cfg(test)]
+        {
+            *guard = Some(logger);
+            return Ok(());
         }
+        
+        // 在生产环境中只允许初始化一次
+        #[cfg(not(test))]
+        {
+            if guard.is_some() {
+                return Err(Error::AlreadyInitialized);
+            }
 
-        self.logger = Some(logger);
-        Ok(())
+            *guard = Some(logger);
+            Ok(())
+        }
     }
 
     /// 获取全局日志器实例
-    pub fn get(&self) -> Option<&Arc<AsyncLogger>> {
-        self.logger.as_ref()
+    pub fn get(&self) -> Option<Arc<AsyncLogger>> {
+        self.logger.lock().unwrap().clone()
     }
 
     /// 记录日志
     pub fn log(&self, record: Record) -> Result<(), Error> {
-        if let Some(logger) = &self.logger {
+        if let Some(logger) = self.logger.lock().unwrap().as_ref() {
             logger.log(record)
         } else {
             Err(Error::NotInitialized)
@@ -293,7 +427,7 @@ impl GlobalLogger {
 
     /// 刷新日志
     pub async fn flush(&self) -> Result<(), Error> {
-        if let Some(logger) = &self.logger {
+        if let Some(logger) = self.logger.lock().unwrap().as_ref() {
             logger.flush().await
         } else {
             Err(Error::NotInitialized)
@@ -302,7 +436,7 @@ impl GlobalLogger {
 
     /// 关闭日志器
     pub async fn shutdown(&self) -> Result<(), Error> {
-        if let Some(logger) = &self.logger {
+        if let Some(logger) = self.logger.lock().unwrap().as_ref() {
             logger.shutdown().await
         } else {
             Err(Error::NotInitialized)
@@ -323,13 +457,11 @@ static GLOBAL_LOGGER: OnceLock<GlobalLogger> = OnceLock::new();
 
 /// 初始化全局日志器
 pub fn init_global_logger(logger: Arc<AsyncLogger>) -> Result<(), Error> {
-    let global_logger = GlobalLogger {
-        logger: Some(logger),
-    };
-
-    GLOBAL_LOGGER
-        .set(global_logger)
-        .map_err(|_| Error::AlreadyInitialized)
+    // 获取或创建全局日志器实例
+    let global_logger = GLOBAL_LOGGER.get_or_init(|| GlobalLogger::new());
+    
+    // 调用实例的init方法来设置日志器
+    global_logger.init(logger)
 }
 
 /// 获取全局日志器

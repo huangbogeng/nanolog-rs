@@ -27,6 +27,21 @@ pub enum Error {
 
     /// 内存错误，如缓冲区溢出
     Memory(&'static str),
+    
+    /// 格式化错误，如无效的格式化字符串
+    Formatting(&'static str),
+    
+    /// 关闭错误，如关闭过程中发生错误
+    Shutdown(&'static str),
+    
+    /// 轮转错误，如日志轮转过程中发生错误
+    Rotation(&'static str),
+    
+    /// 并发错误，如线程同步问题
+    Concurrent(&'static str),
+    
+    /// 其他错误
+    Other(&'static str),
 }
 
 impl fmt::Display for Error {
@@ -38,6 +53,11 @@ impl fmt::Display for Error {
             Error::Queue(msg) => write!(f, "queue error: {}", msg),
             Error::Config(msg) => write!(f, "configuration error: {}", msg),
             Error::Memory(msg) => write!(f, "memory error: {}", msg),
+            Error::Formatting(msg) => write!(f, "formatting error: {}", msg),
+            Error::Shutdown(msg) => write!(f, "shutdown error: {}", msg),
+            Error::Rotation(msg) => write!(f, "rotation error: {}", msg),
+            Error::Concurrent(msg) => write!(f, "concurrent error: {}", msg),
+            Error::Other(msg) => write!(f, "other error: {}", msg),
         }
     }
 }
@@ -77,5 +97,20 @@ mod tests {
 
         let err = Error::Memory("buffer overflow");
         assert_eq!(err.to_string(), "memory error: buffer overflow");
+        
+        let err = Error::Formatting("invalid format string");
+        assert_eq!(err.to_string(), "formatting error: invalid format string");
+        
+        let err = Error::Shutdown("failed to shutdown");
+        assert_eq!(err.to_string(), "shutdown error: failed to shutdown");
+        
+        let err = Error::Rotation("failed to rotate log");
+        assert_eq!(err.to_string(), "rotation error: failed to rotate log");
+        
+        let err = Error::Concurrent("thread synchronization issue");
+        assert_eq!(err.to_string(), "concurrent error: thread synchronization issue");
+        
+        let err = Error::Other("unknown error");
+        assert_eq!(err.to_string(), "other error: unknown error");
     }
 }

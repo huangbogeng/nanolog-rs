@@ -6,7 +6,6 @@
 
 use crate::Record;
 use std::fmt;
-use std::time::{Duration, UNIX_EPOCH};
 
 /// 高性能格式化器接口
 pub trait Formatter: Send + Sync {
@@ -50,23 +49,17 @@ impl DefaultFormatter {
 
     /// 使用预分配缓冲区高效格式化时间戳
     fn format_timestamp(&self, timestamp_ns: u128) -> String {
-        let duration = Duration::from_nanos(timestamp_ns as u64);
-        let seconds = duration.as_secs();
-        let nanos = duration.subsec_nanos();
-
-        // 转换为可读时间格式
-        let time = UNIX_EPOCH + duration;
-        let time_str = format!("{:?}", time);
-
-        // 提取 HH:MM:SS.NNNNNNNNN 部分
-        if let Some(pos) = time_str.find('T')
-            && let Some(time_part) = time_str.get(pos + 1..pos + 21)
-        {
-            return time_part.to_string();
-        }
-
-        // 如果解析失败，返回原始时间戳
-        format!("{}.{:09}", seconds, nanos)
+        // 正确处理纳秒时间戳：将其分为秒和纳秒两部分
+        let seconds = timestamp_ns / 1_000_000_000;
+        let nanos = (timestamp_ns % 1_000_000_000) as u32;
+        
+        // 转换为可读时间格式：HH:MM:SS.NNNNNNNNN
+        let seconds_total = seconds as u64;
+        let hours = seconds_total / 3600;
+        let minutes = (seconds_total % 3600) / 60;
+        let seconds_remaining = seconds_total % 60;
+        
+        format!("{:02}:{:02}:{:02}.{:09}", hours, minutes, seconds_remaining, nanos)
     }
 }
 
