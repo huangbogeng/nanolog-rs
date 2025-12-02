@@ -6,7 +6,7 @@
 
 专为高频交易系统设计的高性能异步日志库，提供超低延迟的日志记录能力。
 
-[English](README.md) | 中文
+[English](README.md) | [中文](README_zh.md)
 
 ## 特性
 
@@ -123,7 +123,55 @@ let logger = AsyncLoggerBuilder::new()
 - 网络接收器（计划中）
 - 通过 `Sink` trait 的自定义接收器
 
-## 高级用法
+### 日志宏
+
+NanoLog-rs 提供了类似流行的 `log` crate 的便捷日志宏：
+
+- `error!` - 用于错误级别消息
+- `warn!` - 用于警告级别消息
+- `info!` - 用于信息级别消息
+- `debug!` - 用于调试级别消息
+- `trace!` - 用于跟踪级别消息
+
+这些宏需要先初始化全局日志器。它们会在格式化消息之前自动检查日志级别是否启用，避免不必要的工作。这种惰性求值确保了在禁用日志时最小的性能影响。
+
+使用示例：
+```rust
+use nanolog_rs::{AsyncLoggerBuilder, Level, init_global_logger};
+
+// 初始化日志器
+let logger = AsyncLoggerBuilder::new()
+    .level(Level::Trace)
+    .build()?;
+init_global_logger(logger)?;
+
+// 使用宏
+error!("这是一条错误消息");
+warn!("这是一条警告消息");
+info!("这是一条信息消息");
+debug!("这是一条调试消息");
+trace!("这是一条跟踪消息");
+
+// 带参数
+let x = 42;
+info!("答案是 {}", x);
+
+// 带目标
+info!(target: "network", "网络连接已建立");
+```
+
+#### 性能优势
+
+这些宏实现了惰性求值，这意味着只有在启用日志级别时才会执行字符串格式化。这避免了在禁用日志时进行昂贵的字符串格式化操作：
+
+```rust
+// 这个复杂的格式化操作只有在启用调试级别时才会执行
+debug!("用户 {} 执行操作 {} 并使用参数 {:?}", user_id, action, params);
+```
+
+#### 高级用法
+
+有关更多高级用法模式，包括条件日志记录、循环日志记录和性能关键日志记录场景，请参见 `examples/macros_advanced_example.rs`。
 
 ### 自定义格式化器
 
