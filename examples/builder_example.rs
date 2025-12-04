@@ -2,6 +2,7 @@
 //!
 //! 展示如何使用AsyncLogger的Builder模式进行配置
 
+use nanolog_rs::format::TimestampStyle;
 use nanolog_rs::{
     AsyncLogger, ConsoleSink, FileSink, JsonFormatter, Level, Record, SimpleFormatter,
 };
@@ -95,6 +96,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "写入文件的日志（大缓冲区）".to_string(),
     ))?;
 
+    // 2.3 使用上海时区易读时间戳（文本显示友好，JSON仍为数值时间戳）
+    println!("\n2.3 使用上海时区易读时间戳...");
+    let readable_logger = AsyncLogger::builder()
+        .level(Level::Info)
+        .with_default_timestamp_style(TimestampStyle::Iso8601(chrono::FixedOffset::east_opt(
+            8 * 3600,
+        )))
+        .with_console_output()
+        .flush_interval(Duration::from_millis(50))
+        .build()?;
+
+    readable_logger.log(Record::new(
+        Level::Info,
+        "examples::builder",
+        file!(),
+        line!(),
+        "这是使用上海时区显示的易读时间戳".to_string(),
+    ))?;
+
     // 3. 演示链式调用
     println!("\n3. 演示链式调用...");
     let chained_logger = AsyncLogger::builder()
@@ -121,6 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     custom_logger.shutdown()?;
     file_logger.shutdown()?;
     buffered_file_logger.shutdown()?;
+    readable_logger.shutdown()?;
     chained_logger.shutdown()?;
 
     println!("\n=== Builder模式示例执行完成 ===");

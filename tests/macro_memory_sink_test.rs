@@ -1,5 +1,5 @@
-use nanolog_rs::{init_global_logger, AsyncLoggerBuilder, Level};
 use nanolog_rs::sink::MemorySink;
+use nanolog_rs::{AsyncLoggerBuilder, Level, init_global_logger};
 use std::sync::Arc;
 use std::time::Duration;
 
