@@ -10,6 +10,12 @@
 - 线程安全：`Arc` 与原子计数统计发送/写入/丢失
 - 优雅关闭：等待已发布日志全部写出后关闭输出目标
 
+## 行为说明
+
+- 非阻塞发布：`log()` 只发布到环形缓冲并立即返回，不等待 I/O（见 `src/logger.rs:142-154`）
+- 刷新与关闭：`flush()/shutdown()` 会等待已发送计数追上已写入计数，并触发 `sink.flush()/sink.shutdown()`（见 `src/logger.rs:200-228`）
+- 容量规则：环形缓冲大小取 `queue_capacity.next_power_of_two().max(64)`，保证 Disruptor 的最小槽位要求（见 `src/logger.rs:112-116`）
+
 ## 安装
 
 ```toml
@@ -98,6 +104,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## 时间戳配置
+
+- 默认行为：全局使用数值时间戳（UNIX 纳秒整型），写入紧凑、解析高效（JSON 格式保持数值时间戳）
+- 可读显示：可为某个 `logger` 配置文本显示为 ISO8601 并带时区（如亚洲上海 `+08:00`）
+
+示例：为当前 `logger` 启用上海时区的易读时间戳显示
+
+```rust
+use nanolog_rs::{AsyncLogger, Level};
+use nanolog_rs::format::DefaultFormatter;
+use std::sync::Arc;
+use std::time::Duration;
+
+let formatter = Arc::new(DefaultFormatter::with_iso8601_shanghai());
+let logger = AsyncLogger::new(
+    Level::Info,
+    formatter,
+    Arc::new(nanolog_rs::ConsoleSink::new()),
+    1024,
+    100,
+    Duration::from_millis(100),
+);
+```
+
+通过 Builder 的便捷方法：
+
+```rust
+use nanolog_rs::{AsyncLogger, Level};
+
+let logger = AsyncLogger::builder()
+    .level(Level::Info)
+    .with_iso8601_shanghai_formatting()
+    .build()?;
+```
+
+或自定义时区偏移：
+
+```rust
+use nanolog_rs::{AsyncLogger, Level};
+use nanolog_rs::format::TimestampStyle;
+
+let logger = AsyncLogger::builder()
+    .level(Level::Info)
+    .with_default_timestamp_style(
+        TimestampStyle::Iso8601(time::UtcOffset::from_hms(9, 0, 0).unwrap())
+    )
+    .build()?;
+```
+
+注意：`JsonFormatter` 为机器友好，始终写入数值时间戳以保持体积小、解析高效（见 `src/format.rs:146-173`）。
+
 ## 运行
 
 - 构建示例：`cargo build --examples`
@@ -105,7 +162,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - 运行测试：`cargo test`
 - 运行基准：`cargo bench`
 
+## 发布前检查
+
+- 格式化：`cargo fmt --all --check`
+- 静态检查：`cargo clippy --all-targets --all-features`
+- 单元测试：`cargo test`
+- 构建发布包：`cargo build --release`
+
 ## 许可
 
 MIT License
-
