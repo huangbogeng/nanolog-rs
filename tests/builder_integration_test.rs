@@ -5,8 +5,8 @@
 use nanolog_rs::{AsyncLoggerBuilder, Level, Record};
 use std::time::Duration;
 
-#[tokio::test]
-async fn test_builder_integration() {
+#[test]
+fn test_builder_integration() {
     // 测试默认配置
     let logger = AsyncLoggerBuilder::new()
         .build()
@@ -54,18 +54,17 @@ async fn test_builder_integration() {
         .expect("Failed to log trace message");
 
     // 确保所有日志都被处理
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    std::thread::sleep(Duration::from_millis(200));
 
     // 关闭日志器
-    logger.shutdown().await.expect("Failed to shutdown logger");
+    logger.shutdown().expect("Failed to shutdown logger");
     full_config_logger
         .shutdown()
-        .await
         .expect("Failed to shutdown full config logger");
 }
 
-#[tokio::test]
-async fn test_builder_convenience_methods() {
+#[test]
+fn test_builder_convenience_methods() {
     // 测试便捷方法组合
     let logger = AsyncLoggerBuilder::new()
         .with_debug_level()
@@ -84,5 +83,5 @@ async fn test_builder_convenience_methods() {
         ))
         .expect("Failed to log message");
 
-    logger.shutdown().await.expect("Failed to shutdown logger");
+    logger.shutdown().expect("Failed to shutdown logger");
 }
