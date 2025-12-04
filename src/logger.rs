@@ -18,41 +18,39 @@ use nanolog_rs::{AsyncLogger, Level, Record, DefaultFormatter, ConsoleSink};
 use std::sync::Arc;
 use std::time::Duration;
 
-fn main() {
-    let logger = AsyncLogger::new(
-        Level::Info,
-        Arc::new(DefaultFormatter::new()),
-        Arc::new(ConsoleSink::new()),
-        1024,
-        100,
-        Duration::from_millis(100),
-    );
+let logger = AsyncLogger::new(
+    Level::Info,
+    Arc::new(DefaultFormatter::new()),
+    Arc::new(ConsoleSink::new()),
+    1024,
+    100,
+    Duration::from_millis(100),
+);
 
-    let record = Record::new(
-        Level::Info,
-        "example",
-        file!(),
-        line!(),
-        "Hello, world!".to_string()
-    );
+let record = Record::new(
+    Level::Info,
+    "example",
+    file!(),
+    line!(),
+    "Hello, world!".to_string()
+);
 
-    logger.log(record).unwrap();
-    logger.shutdown().unwrap();
-}
+logger.log(record).unwrap();
+logger.shutdown().unwrap();
 ```
 */
 
 use disruptor::*;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use crate::Level;
+use crate::Record;
 use crate::error::Error;
 use crate::format::Formatter;
 use crate::sink::Sink;
-use crate::Level;
-use crate::Record;
 
 /// 工作线程配置
 struct Event {

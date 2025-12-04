@@ -30,6 +30,8 @@ lazy_static = "1.4.0"
 thiserror = "2.0.17"
 log = { version = "0.4.28", features = ["std"] }
 disruptor = "3.6.1"
+time = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 criterion = "0.8.0"

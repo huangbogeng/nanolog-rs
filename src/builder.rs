@@ -12,6 +12,7 @@ use crate::Level;
 
 use crate::error::Error;
 use crate::format::Formatter;
+use crate::format::TimestampStyle;
 use crate::logger::AsyncLogger;
 use crate::sink::Sink;
 
@@ -102,6 +103,22 @@ impl AsyncLoggerBuilder {
     /// 使用简单格式化器 (便捷方法)
     pub fn with_simple_formatting(mut self) -> Self {
         self.formatter = Some(Arc::new(crate::format::SimpleFormatter::new()));
+        self
+    }
+
+    /// 使用默认格式化器并配置为上海时区 ISO8601 (便捷方法)
+    pub fn with_iso8601_shanghai_formatting(mut self) -> Self {
+        self.formatter = Some(Arc::new(
+            crate::format::DefaultFormatter::with_iso8601_shanghai(),
+        ));
+        self
+    }
+
+    /// 使用默认格式化器并指定时间戳风格 (便捷方法)
+    pub fn with_default_timestamp_style(mut self, style: TimestampStyle) -> Self {
+        self.formatter = Some(Arc::new(
+            crate::format::DefaultFormatter::with_timestamp_style(style),
+        ));
         self
     }
 

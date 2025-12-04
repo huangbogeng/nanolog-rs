@@ -5,6 +5,7 @@
 */
 
 use crate::Record;
+use chrono::{DateTime, FixedOffset, Utc};
 use std::fmt;
 
 /// 高性能格式化器接口
@@ -17,6 +18,16 @@ pub trait Formatter: Send + Sync {
 pub struct DefaultFormatter {
     /// 是否使用彩色输出
     colored: bool,
+    /// 时间戳显示风格
+    timestamp_style: TimestampStyle,
+}
+
+/// 时间戳显示风格
+pub enum TimestampStyle {
+    /// 使用 UNIX 纳秒整型（十进制）
+    NumericNs,
+    /// 使用 ISO8601 字符串并带时区偏移（chrono）；`None` 表示使用 UTC
+    Iso8601(Option<FixedOffset>),
 }
 
 impl DefaultFormatter {
@@ -24,17 +35,41 @@ impl DefaultFormatter {
     pub fn new() -> Self {
         Self {
             colored: Self::should_use_color(),
+            timestamp_style: TimestampStyle::NumericNs,
         }
     }
 
     /// 创建使用彩色输出的格式化器
     pub fn colored() -> Self {
-        Self { colored: true }
+        Self {
+            colored: true,
+            timestamp_style: TimestampStyle::NumericNs,
+        }
     }
 
     /// 创建不使用彩色输出的格式化器
     pub fn plain() -> Self {
-        Self { colored: false }
+        Self {
+            colored: false,
+            timestamp_style: TimestampStyle::NumericNs,
+        }
+    }
+
+    /// 使用 ISO8601 上海时区时间戳
+    pub fn with_iso8601_shanghai() -> Self {
+        let offset = FixedOffset::east_opt(8 * 3600);
+        Self {
+            colored: Self::should_use_color(),
+            timestamp_style: TimestampStyle::Iso8601(offset),
+        }
+    }
+
+    /// 设置时间戳风格
+    pub fn with_timestamp_style(style: TimestampStyle) -> Self {
+        Self {
+            colored: Self::should_use_color(),
+            timestamp_style: style,
+        }
     }
 
     /// 检查是否应该使用彩色输出
@@ -47,22 +82,31 @@ impl DefaultFormatter {
         return false;
     }
 
-    /// 使用预分配缓冲区高效格式化时间戳
+    /// 时间戳格式化（根据风格）
     fn format_timestamp(&self, timestamp_ns: u128) -> String {
-        // 正确处理纳秒时间戳：将其分为秒和纳秒两部分
-        let seconds = timestamp_ns / 1_000_000_000;
-        let nanos = (timestamp_ns % 1_000_000_000) as u32;
+        match self.timestamp_style {
+            TimestampStyle::NumericNs => timestamp_ns.to_string(),
+            TimestampStyle::Iso8601(offset_opt) => {
+                // 将纳秒转换为秒，并在溢出时舍弃精度
+                let secs_u128 = timestamp_ns / 1_000_000_000;
+                let nanos_u32 = (timestamp_ns % 1_000_000_000) as u32;
+                let (secs_i64, nanos_i32) = if secs_u128 > i64::MAX as u128 {
+                    (i64::MAX, 0)
+                } else {
+                    (secs_u128 as i64, nanos_u32)
+                };
 
-        // 转换为可读时间格式：HH:MM:SS.NNNNNNNNN
-        let seconds_total = seconds as u64;
-        let hours = seconds_total / 3600;
-        let minutes = (seconds_total % 3600) / 60;
-        let seconds_remaining = seconds_total % 60;
-
-        format!(
-            "{:02}:{:02}:{:02}.{:09}",
-            hours, minutes, seconds_remaining, nanos
-        )
+                let utc_dt = DateTime::<Utc>::from_timestamp(secs_i64, nanos_i32)
+                    .unwrap_or(DateTime::<Utc>::UNIX_EPOCH);
+                match offset_opt {
+                    Some(offset) => utc_dt
+                        .with_timezone(&offset)
+                        .format("%Y-%m-%dT%H:%M:%S%.9f%:z")
+                        .to_string(),
+                    None => utc_dt.format("%Y-%m-%dT%H:%M:%S%.9fZ").to_string(),
+                }
+            }
+        }
     }
 }
 
@@ -76,7 +120,7 @@ impl Formatter for DefaultFormatter {
     fn format(&self, record: &Record) -> Result<Vec<u8>, fmt::Error> {
         let mut result = Vec::new();
 
-        // 格式化时间戳
+        // 格式化时间戳（可配置：数字或ISO8601）
         result.extend_from_slice(b"[");
         result.extend_from_slice(self.format_timestamp(record.timestamp()).as_bytes());
         result.extend_from_slice(b"] ");
