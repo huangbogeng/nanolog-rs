@@ -72,8 +72,8 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    #[tokio::test]
-    async fn test_api_compilation() {
+    #[test]
+    fn test_api_compilation() {
         // 测试API是否能正常编译
         let formatter = Arc::new(DefaultFormatter::new());
         let sink = Arc::new(ConsoleSink::new());
@@ -98,8 +98,7 @@ mod tests {
 
         // 测试日志记录功能
         assert!(logger.log(record).is_ok());
-
-        // 测试关闭功能
-        assert!(logger.shutdown().await.is_ok());
+        assert!(logger.flush().is_ok());
+        assert!(logger.shutdown().is_ok());
     }
 }

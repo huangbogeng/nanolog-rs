@@ -52,14 +52,17 @@ impl DefaultFormatter {
         // 正确处理纳秒时间戳：将其分为秒和纳秒两部分
         let seconds = timestamp_ns / 1_000_000_000;
         let nanos = (timestamp_ns % 1_000_000_000) as u32;
-        
+
         // 转换为可读时间格式：HH:MM:SS.NNNNNNNNN
         let seconds_total = seconds as u64;
         let hours = seconds_total / 3600;
         let minutes = (seconds_total % 3600) / 60;
         let seconds_remaining = seconds_total % 60;
-        
-        format!("{:02}:{:02}:{:02}.{:09}", hours, minutes, seconds_remaining, nanos)
+
+        format!(
+            "{:02}:{:02}:{:02}.{:09}",
+            hours, minutes, seconds_remaining, nanos
+        )
     }
 }
 

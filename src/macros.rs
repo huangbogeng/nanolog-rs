@@ -89,8 +89,8 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    #[tokio::test]
-    async fn test_macro_compilation() {
+    #[test]
+    fn test_macro_compilation() {
         // 创建测试日志器
         let formatter = Arc::new(DefaultFormatter::new());
         let sink = Arc::new(ConsoleSink::new());
@@ -98,12 +98,11 @@ mod tests {
             Level::Trace,
             formatter,
             sink,
-            1000,
-            10,
-            Duration::from_millis(100),
+            1024,
+            64,
+            Duration::from_millis(50),
         ));
 
-        // 初始化全局日志器
         let _ = init_global_logger(logger);
 
         // 测试宏是否能正常编译

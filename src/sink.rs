@@ -10,19 +10,18 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// 高性能输出目标接口
-#[async_trait::async_trait]
 pub trait Sink: Send + Sync {
     /// 写入日志数据（高性能版本）
-    async fn write(&self, data: &[u8]) -> io::Result<()>;
+    fn write(&self, data: &[u8]) -> io::Result<()>;
 
     /// 批量写入日志数据
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()>;
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()>;
 
     /// 刷新输出缓冲区
-    async fn flush(&self) -> io::Result<()>;
+    fn flush(&self) -> io::Result<()>;
 
     /// 关闭输出目标
-    async fn shutdown(&self) -> io::Result<()>;
+    fn shutdown(&self) -> io::Result<()>;
 }
 
 /// 控制台输出目标
@@ -49,9 +48,8 @@ impl Default for ConsoleSink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for ConsoleSink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         if self.stderr {
             io::stderr().write_all(data)?;
         } else {
@@ -60,7 +58,7 @@ impl Sink for ConsoleSink {
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         for item in data {
             if self.stderr {
                 io::stderr().write_all(item)?;
@@ -71,7 +69,7 @@ impl Sink for ConsoleSink {
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         if self.stderr {
             io::stderr().flush()?;
         } else {
@@ -80,7 +78,7 @@ impl Sink for ConsoleSink {
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -128,7 +126,7 @@ impl FileSink {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
+                    .as_secs(),
             )),
             max_files: None,
         })
@@ -158,7 +156,7 @@ impl FileSink {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
+                    .as_secs(),
             )),
             max_files: None,
         })
@@ -208,8 +206,11 @@ impl FileSink {
 
     /// 执行日志轮转
     fn rotate(&self) -> io::Result<()> {
-        let mut writer_guard = self.writer.lock().map_err(|_| io::Error::other("lock poisoned"))?;
-        
+        let mut writer_guard = self
+            .writer
+            .lock()
+            .map_err(|_| io::Error::other("lock poisoned"))?;
+
         // 刷新并关闭当前文件
         writer_guard.flush()?;
         drop(writer_guard);
@@ -219,28 +220,36 @@ impl FileSink {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         let rotated_path = format!("{}.{}", self.path.to_string_lossy(), timestamp);
-        
+
         // 重命名当前文件
         std::fs::rename(&self.path, &rotated_path)?;
-        
+
         // 创建新的日志文件
-        let new_file = OpenOptions::new().create(true).append(true).open(&self.path)?;
-        
+        let new_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+
         // 更新写入器
-        let mut writer_guard = self.writer.lock().map_err(|_| io::Error::other("lock poisoned"))?;
+        let mut writer_guard = self
+            .writer
+            .lock()
+            .map_err(|_| io::Error::other("lock poisoned"))?;
         *writer_guard = BufWriter::new(new_file);
-        
+
         // 重置文件大小
-        self.current_size.store(0, std::sync::atomic::Ordering::Relaxed);
-        
+        self.current_size
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+
         // 更新最后轮转时间
-        self.last_rotate.store(timestamp, std::sync::atomic::Ordering::Relaxed);
-        
+        self.last_rotate
+            .store(timestamp, std::sync::atomic::Ordering::Relaxed);
+
         // 清理旧日志文件
         self.cleanup_old_files()?;
-        
+
         Ok(())
     }
 
@@ -250,12 +259,12 @@ impl FileSink {
             // 获取所有日志文件
             let mut files = Vec::new();
             let file_name = self.path.file_name().unwrap_or_default().to_string_lossy();
-            
+
             if let Some(parent) = self.path.parent() {
                 for entry in std::fs::read_dir(parent)? {
                     let entry = entry?;
                     let path = entry.path();
-                    
+
                     if path.is_file() {
                         let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
                         if file_stem.starts_with(&*file_name) {
@@ -266,23 +275,22 @@ impl FileSink {
                     }
                 }
             }
-            
+
             // 按修改时间排序
             files.sort_by(|a, b| b.0.cmp(&a.0));
-            
+
             // 删除多余的文件
             for file in files.into_iter().skip(max_files) {
                 let _ = std::fs::remove_file(file.1);
             }
         }
-        
+
         Ok(())
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for FileSink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         // 检查是否需要轮转
         if self.should_rotate() {
             self.rotate()?;
@@ -293,14 +301,15 @@ impl Sink for FileSink {
             .lock()
             .map_err(|_| io::Error::other("lock poisoned"))?;
         writer.write_all(data)?;
-        
+
         // 更新文件大小
-        self.current_size.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        
+        self.current_size
+            .fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         // 检查是否需要轮转
         if self.should_rotate() {
             self.rotate()?;
@@ -310,20 +319,21 @@ impl Sink for FileSink {
             .writer
             .lock()
             .map_err(|_| io::Error::other("lock poisoned"))?;
-        
+
         let mut total_size = 0;
         for item in data {
             writer.write_all(item)?;
             total_size += item.len();
         }
-        
+
         // 更新文件大小
-        self.current_size.fetch_add(total_size, std::sync::atomic::Ordering::Relaxed);
-        
+        self.current_size
+            .fetch_add(total_size, std::sync::atomic::Ordering::Relaxed);
+
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         let mut writer = self
             .writer
             .lock()
@@ -332,7 +342,7 @@ impl Sink for FileSink {
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         let mut writer = self
             .writer
             .lock()
@@ -378,9 +388,8 @@ impl Default for MemorySink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for MemorySink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         let mut buffer = self
             .buffer
             .lock()
@@ -389,7 +398,7 @@ impl Sink for MemorySink {
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         let mut buffer = self
             .buffer
             .lock()
@@ -400,12 +409,12 @@ impl Sink for MemorySink {
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         // 内存输出目标不需要刷新
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -421,24 +430,23 @@ impl NullSink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for NullSink {
-    async fn write(&self, _data: &[u8]) -> io::Result<()> {
+    fn write(&self, _data: &[u8]) -> io::Result<()> {
         // 不执行任何操作
         Ok(())
     }
 
-    async fn write_batch(&self, _data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, _data: &[Vec<u8>]) -> io::Result<()> {
         // 不执行任何操作
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         // 不执行任何操作
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         // 不执行任何操作
         Ok(())
     }
@@ -463,32 +471,31 @@ impl CompositeSink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for CompositeSink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.write(data).await?;
+            sink.write(data)?;
         }
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.write_batch(data).await?;
+            sink.write_batch(data)?;
         }
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.flush().await?;
+            sink.flush()?;
         }
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.shutdown().await?;
+            sink.shutdown()?;
         }
         Ok(())
     }

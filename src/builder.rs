@@ -172,8 +172,8 @@ mod tests {
         assert!(builder.sink.is_some());
     }
 
-    #[tokio::test]
-    async fn test_builder_build() {
+    #[test]
+    fn test_builder_build() {
         let result = AsyncLoggerBuilder::new().level(Level::Info).build();
 
         assert!(result.is_ok());
@@ -206,8 +206,8 @@ mod tests {
         assert_eq!(builder.flush_interval, Duration::from_millis(200));
     }
 
-    #[tokio::test]
-    async fn test_builder_with_all_configurations() {
+    #[test]
+    fn test_builder_with_all_configurations() {
         let result = AsyncLoggerBuilder::new()
             .level(Level::Trace)
             .with_json_formatting()
