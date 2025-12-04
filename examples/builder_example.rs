@@ -2,12 +2,13 @@
 //!
 //! 展示如何使用AsyncLogger的Builder模式进行配置
 
-use nanolog_rs::{AsyncLogger, ConsoleSink, JsonFormatter, Level, Record};
+use nanolog_rs::{
+    AsyncLogger, ConsoleSink, FileSink, JsonFormatter, Level, Record, SimpleFormatter,
+};
 use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== nanolog-rs Builder模式使用示例 ===\n");
 
     // 1. 使用Builder模式创建日志器（默认配置）
@@ -58,6 +59,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "这是一个警告级别的日志".to_string(),
     ))?;
 
+    // 2.1 使用文件输出（便捷方法）
+    let file_logger = AsyncLogger::builder()
+        .level(Level::Info)
+        .with_file_output("logs/builder_file.log")
+        .flush_interval(Duration::from_millis(50))
+        .build()?;
+
+    file_logger.log(Record::new(
+        Level::Info,
+        "examples::builder",
+        file!(),
+        line!(),
+        "写入文件的日志（便捷方法）".to_string(),
+    ))?;
+
+    // 2.2 使用文件输出（自定义缓冲区大小）
+    let buffered_sink = Arc::new(FileSink::with_buffer_size(
+        "logs/builder_buffered.log",
+        1 << 20,
+    )?);
+    let buffered_file_logger = AsyncLogger::builder()
+        .level(Level::Info)
+        .formatter(Arc::new(SimpleFormatter::new()))
+        .sink(buffered_sink)
+        .queue_capacity(2048)
+        .flush_interval(Duration::from_millis(20))
+        .build()?;
+
+    buffered_file_logger.log(Record::new(
+        Level::Info,
+        "examples::builder",
+        file!(),
+        line!(),
+        "写入文件的日志（大缓冲区）".to_string(),
+    ))?;
+
     // 3. 演示链式调用
     println!("\n3. 演示链式调用...");
     let chained_logger = AsyncLogger::builder()
@@ -76,14 +113,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
-    // 等待日志处理完成
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    std::thread::sleep(Duration::from_millis(100));
 
     // 4. 优雅关闭所有日志器
     println!("\n4. 优雅关闭所有日志器...");
-    logger.shutdown().await?;
-    custom_logger.shutdown().await?;
-    chained_logger.shutdown().await?;
+    logger.shutdown()?;
+    custom_logger.shutdown()?;
+    file_logger.shutdown()?;
+    buffered_file_logger.shutdown()?;
+    chained_logger.shutdown()?;
 
     println!("\n=== Builder模式示例执行完成 ===");
 

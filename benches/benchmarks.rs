@@ -120,12 +120,7 @@ fn bench_logging(c: &mut Criterion) {
         });
 
         // 关闭日志器以释放资源
-        let logger = logger;
-        if let Ok(runtime) = tokio::runtime::Runtime::new() {
-            runtime.block_on(async {
-                let _ = logger.shutdown().await;
-            });
-        }
+        let _ = logger.shutdown();
     });
 
     group.bench_function("batch_logging", |b| {
@@ -152,12 +147,7 @@ fn bench_logging(c: &mut Criterion) {
         });
 
         // 关闭日志器以释放资源
-        let logger = logger;
-        if let Ok(runtime) = tokio::runtime::Runtime::new() {
-            runtime.block_on(async {
-                let _ = logger.shutdown().await;
-            });
-        }
+        let _ = logger.shutdown();
     });
 
     group.finish();
@@ -252,11 +242,7 @@ fn bench_concurrent(c: &mut Criterion) {
 
         // 关闭日志器以释放资源
         if let Ok(logger) = Arc::try_unwrap(logger) {
-            if let Ok(runtime) = tokio::runtime::Runtime::new() {
-                runtime.block_on(async {
-                    let _ = logger.shutdown().await;
-                });
-            }
+            let _ = logger.shutdown();
         }
     });
 

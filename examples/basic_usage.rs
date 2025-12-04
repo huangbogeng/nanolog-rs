@@ -6,8 +6,7 @@ use nanolog_rs::{AsyncLogger, ConsoleSink, DefaultFormatter, FileSink, Level, Me
 use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== nanolog-rs 基本使用示例 ===\n");
 
     // 1. 创建控制台日志器
@@ -108,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 等待日志处理完成
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    std::thread::sleep(Duration::from_millis(200));
 
     // 获取内存中的日志内容
     let memory_content = memory_sink.get_content();
@@ -157,10 +156,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. 优雅关闭所有日志器
     println!("\n5. 优雅关闭所有日志器...");
 
-    console_logger.shutdown().await?;
-    file_logger.shutdown().await?;
-    memory_logger.shutdown().await?;
-    concurrent_logger.shutdown().await?;
+    console_logger.shutdown()?;
+    file_logger.shutdown()?;
+    memory_logger.shutdown()?;
+    concurrent_logger.shutdown()?;
 
     println!("\n=== 示例执行完成 ===");
 

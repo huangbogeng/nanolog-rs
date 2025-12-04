@@ -29,27 +29,26 @@ impl Formatter for JsonFormatter {
 /// 自定义彩色控制台输出
 struct ColoredConsoleSink;
 
-#[async_trait::async_trait]
 impl Sink for ColoredConsoleSink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         // 直接输出字节数据到控制台
         io::stdout().write_all(data)?;
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         for item in data {
             io::stdout().write_all(item)?;
         }
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         io::stdout().flush()?;
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -65,39 +64,37 @@ impl CompositeSink {
     }
 }
 
-#[async_trait::async_trait]
 impl Sink for CompositeSink {
-    async fn write(&self, data: &[u8]) -> io::Result<()> {
+    fn write(&self, data: &[u8]) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.write(data).await?;
+            sink.write(data)?;
         }
         Ok(())
     }
 
-    async fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
+    fn write_batch(&self, data: &[Vec<u8>]) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.write_batch(data).await?;
+            sink.write_batch(data)?;
         }
         Ok(())
     }
 
-    async fn flush(&self) -> io::Result<()> {
+    fn flush(&self) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.flush().await?;
+            sink.flush()?;
         }
         Ok(())
     }
 
-    async fn shutdown(&self) -> io::Result<()> {
+    fn shutdown(&self) -> io::Result<()> {
         for sink in &self.sinks {
-            sink.shutdown().await?;
+            sink.shutdown()?;
         }
         Ok(())
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== nanolog-rs 高级使用示例 ===\n");
 
     // 1. 使用自定义JSON格式化器
@@ -212,10 +209,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. 优雅关闭
     println!("\n5. 优雅关闭所有日志器...");
 
-    json_logger.shutdown().await?;
-    composite_logger.shutdown().await?;
-    performance_logger.shutdown().await?;
-    small_queue_logger.shutdown().await?;
+    json_logger.shutdown()?;
+    composite_logger.shutdown()?;
+    performance_logger.shutdown()?;
+    small_queue_logger.shutdown()?;
 
     println!("\n=== 高级示例执行完成 ===");
 
