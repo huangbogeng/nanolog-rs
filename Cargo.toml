@@ -1,6 +1,6 @@
 [package]
 name = "nanolog-rs"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 description = "High performance asynchronous logging library for high-frequency trading systems"
 authors = ["huangbogeng <huangbogeng@outlook.com>"]
@@ -8,8 +8,14 @@ license = "MIT"
 homepage = "https://github.com/huangbogeng/nanolog-rs"
 repository = "https://github.com/huangbogeng/nanolog-rs"
 documentation = "https://docs.rs/nanolog-rs"
-keywords = ["logging", "async", "high-performance", "trading"]
+readme = "README.md"
+keywords = ["logging", "async", "high-performance"]
 categories = ["asynchronous", "development-tools::debugging"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
 
 # Clippy configuration
 [lints.clippy]
