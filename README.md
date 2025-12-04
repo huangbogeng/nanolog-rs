@@ -1,380 +1,111 @@
 # NanoLog-rs
 
-[![Crates.io](https://img.shields.io/crates/v/nanolog-rs.svg)](https://crates.io/crates/nanolog-rs)
-[![Documentation](https://docs.rs/nanolog-rs/badge.svg)](https://docs.rs/nanolog-rs)
-[![License](https://img.shields.io/crates/l/nanolog-rs.svg)](https://github.com/huangbogeng/nanolog-rs/blob/master/LICENSE)
+高性能非阻塞日志库，基于 Disruptor 环形缓冲实现超低延迟与高吞吐。
 
-High-performance asynchronous logging library designed for high-frequency trading systems, providing ultra-low latency logging capabilities.
+## 特性
 
-[English](README.md) | [中文](README_zh.md)
+- 非阻塞发布：调用方快速发布日志记录到环形缓冲，不等待 I/O
+- 零拷贝记录：使用高效字节格式化与预分配事件，减少分配
+- 批量处理：消费者在批尾统一刷新，支持 `write_batch` 降低系统调用
+- 线程安全：`Arc` 与原子计数统计发送/写入/丢失
+- 优雅关闭：等待已发布日志全部写出后关闭输出目标
 
-## Features
-
-- **Ultra-Low Latency**: Sub-microsecond logging latency for critical applications
-- **Zero-Copy Design**: Minimizes memory allocation and copying overhead
-- **Asynchronous Processing**: Non-blocking logging operations with dedicated worker threads
-- **Lock-Free Architecture**: Thread-safe operations without mutex contention
-- **Multiple Output Targets**: Support for console, file, and custom sinks
-- **Flexible Formatting**: Built-in formatters (Simple, JSON) with custom formatter support
-- **Configurable Levels**: Standard log levels (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
-- **Batch Processing**: Efficient batch handling for high-throughput scenarios
-
-## Quick Start
-
-### Installation
-
-Add this to your `Cargo.toml`:
+## 安装
 
 ```toml
 [dependencies]
-nanolog-rs = "0.1.0"
-tokio = { version = "1.32", features = ["full"] }
+nanolog-rs = "0.2"
 ```
 
-### Basic Usage
+## 快速开始
 
 ```rust
-use nanolog_rs::{AsyncLogger, Level};
+use nanolog_rs::{AsyncLogger, Level, Record, DefaultFormatter, ConsoleSink};
+use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize the logger
+fn main() {
+    let logger = AsyncLogger::new(
+        Level::Info,
+        Arc::new(DefaultFormatter::new()),
+        Arc::new(ConsoleSink::new()),
+        1024,
+        100,
+        Duration::from_millis(100),
+    );
+
+    let record = Record::new(
+        Level::Info,
+        "example",
+        file!(),
+        line!(),
+        "Hello, world!".to_string()
+    );
+
+    logger.log(record).unwrap();
+    logger.shutdown().unwrap();
+}
+```
+
+## 文件输出
+
+```rust
+use nanolog_rs::{AsyncLogger, Level, Record, SimpleFormatter, FileSink};
+use std::sync::Arc;
+use std::time::Duration;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 便捷方法
     let logger = AsyncLogger::builder()
         .level(Level::Info)
+        .with_file_output("logs/app.log")
         .build()?;
-    
-    // Log some messages
-    logger.log(nanolog_rs::Record::new(
-        Level::Info,
-        "app::main",
-        file!(),
-        line!(),
-        "Application started".to_string()
-    ))?;
-    
-    logger.log(nanolog_rs::Record::new(
-        Level::Warn,
-        "app::main",
-        file!(),
-        line!(),
-        "This is a warning message".to_string()
-    ))?;
-    
-    logger.log(nanolog_rs::Record::new(
-        Level::Error,
-        "app::main",
-        file!(),
-        line!(),
-        "An error occurred: Something went wrong".to_string()
-    ))?;
-    
-    // Ensure all logs are flushed before shutdown
-    logger.shutdown().await?;
-    
+
+    // 自定义缓冲
+    let buffered_sink = Arc::new(FileSink::with_buffer_size("logs/app_buffered.log", 1 << 20)?);
+    let buffered = AsyncLogger::builder()
+        .level(Level::Info)
+        .formatter(Arc::new(SimpleFormatter::new()))
+        .sink(buffered_sink)
+        .queue_capacity(2048)
+        .flush_interval(Duration::from_millis(20))
+        .build()?;
+
+    logger.log(Record::new(Level::Info, "app", file!(), line!(), "file logger".to_string()))?;
+    buffered.log(Record::new(Level::Info, "app", file!(), line!(), "buffered file".to_string()))?;
+
+    logger.shutdown()?;
+    buffered.shutdown()?;
     Ok(())
 }
 ```
 
-## Core Components
+## 宏用法
 
-### AsyncLogger
-
-The main entry point for logging operations. Provides asynchronous, non-blocking logging capabilities.
-
-To create an AsyncLogger instance, use the modern Builder pattern:
-
-```rust
-use nanolog_rs::AsyncLoggerBuilder;
-
-let logger = AsyncLoggerBuilder::new()
-    .level(Level::Debug)
-    .batch_size(1000)
-    .flush_interval(Duration::from_millis(100))
-    .build()?;
-```
-
-Or use the convenience methods for common configurations:
-
-```rust
-use nanolog_rs::AsyncLoggerBuilder;
-
-let logger = AsyncLoggerBuilder::new()
-    .with_debug_level()
-    .with_json_formatting()
-    .with_console_output()
-    .build()?;
-```
-
-### Formatters
-
-Built-in formatters for different output formats:
-
-- `SimpleFormatter`: Human-readable format
-- `JsonFormatter`: Structured JSON format
-- Custom formatters can be implemented via the `Formatter` trait
-
-### Sinks
-
-Output destinations for log messages:
-
-- `ConsoleSink`: Standard output/error
-- File sinks (planned)
-- Network sinks (planned)
-- Custom sinks via the `Sink` trait
-
-### Logging Macros
-
-NanoLog-rs provides convenient logging macros similar to the popular `log` crate:
-
-- `error!` - For error-level messages
-- `warn!` - For warning-level messages
-- `info!` - For informational messages
-- `debug!` - For debugging messages
-- `trace!` - For trace-level messages
-
-These macros require a global logger to be initialized first. They automatically check if the log level is enabled before formatting the message, avoiding unnecessary work. This lazy evaluation ensures minimal performance impact when logging is disabled.
-
-Example usage:
 ```rust
 use nanolog_rs::{AsyncLoggerBuilder, Level, init_global_logger};
-
-// Initialize logger
-let logger = AsyncLoggerBuilder::new()
-    .level(Level::Trace)
-    .build()?;
-init_global_logger(logger)?;
-
-// Use macros
-error!("This is an error message");
-warn!("This is a warning message");
-info!("This is an info message");
-debug!("This is a debug message");
-trace!("This is a trace message");
-
-// With parameters
-let x = 42;
-info!("The answer is {}", x);
-
-// With target
-info!(target: "network", "Network connection established");
-```
-
-#### Performance Benefits
-
-The macros implement lazy evaluation, meaning that string formatting only occurs if the log level is enabled. This avoids expensive string formatting operations when logging is disabled:
-
-```rust
-// This complex formatting operation is only executed if debug level is enabled
-debug!("User {} performed action {} with parameters {:?}", user_id, action, params);
-```
-
-#### Advanced Usage
-
-See the `examples/macros_advanced_example.rs` for more advanced usage patterns including conditional logging, loop logging, and performance-critical logging scenarios.
-
-## Advanced Usage
-
-### Custom Formatter
-
-```rust
-use nanolog_rs::{Formatter, Record};
 use std::sync::Arc;
 
-struct CustomFormatter;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let logger = AsyncLoggerBuilder::new()
+        .level(Level::Trace)
+        .with_file_output("logs/macro.log")
+        .build()?;
+    init_global_logger(Arc::new(logger))?;
 
-impl Formatter for CustomFormatter {
-    fn format(&self, record: &Record) -> String {
-        format!("[{}] {} - {}", 
-                record.timestamp(),
-                record.level(),
-                record.message())
-    }
-}
-
-// Use custom formatter
-let logger = AsyncLogger::builder()
-    .formatter(Arc::new(CustomFormatter))
-    .build()?;
-```
-
-### Custom Sink
-
-```rust
-use nanolog_rs::{Sink, Record};
-use std::sync::Arc;
-
-struct CustomSink;
-
-#[async_trait::async_trait]
-impl Sink for CustomSink {
-    async fn write(&self, formatted_message: &str, _record: &Record) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Custom write logic (e.g., send to external service)
-        println!("Custom sink: {}", formatted_message);
-        Ok(())
-    }
-    
-    async fn flush(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Custom flush logic
-        Ok(())
-    }
-}
-
-// Use custom sink
-let logger = AsyncLogger::builder()
-    .sink(Arc::new(CustomSink))
-    .build()?;
-```
-
-## Performance
-
-NanoLog-rs is optimized for high-frequency trading systems with the following performance characteristics:
-
-- Logging latency < 1 microsecond (99.9th percentile)
-- Supports millions of log entries per second
-- Low CPU and memory footprint
-- Non-blocking design that doesn't impact main business logic
-
-### Benchmark Results
-
-Our benchmark suite demonstrates the ultra-low latency capabilities of NanoLog-rs:
-
-| Operation | Average Time | Throughput |
-|-----------|-------------|------------|
-| Buffer Acquisition/Release | 53.5 ns | ~18 million/sec |
-| Buffer Write Operations | 73.1 ns | ~13 million/sec |
-
-These results were obtained using Criterion.rs with 100 samples over 10 seconds of measurement time. The benchmarks measure raw operation performance in isolation, demonstrating the minimal overhead of our core components.
-
-### Running Benchmarks
-
-Run the built-in benchmark suite:
-
-```bash
-cargo bench
-```
-
-Performance targets:
-- Ultra-low latency for critical applications
-- High throughput for batch processing
-- Minimal resource consumption
-
-## Testing
-
-To run all tests, use:
-
-```bash
-cargo test
-```
-
-### Test Organization
-
-Our tests are organized into three categories:
-
-1. Unit Tests: Located within each module's `tests` submodule
-2. Integration Tests: Located in the `tests/` directory
-3. Documentation Tests: Embedded in code documentation
-
-### Builder Pattern Tests
-
-To specifically run tests related to the Builder pattern, use:
-
-```bash
-cargo test builder
-```
-
-These tests cover:
-- Basic builder creation and configuration
-- Convenience methods functionality
-- Builder construction and error handling
-- Complete configuration workflows
-- Integration testing with real-world scenarios
-
-We also have dedicated integration tests in `tests/builder_integration_test.rs` that demonstrate real-world usage patterns:
-
-```bash
-cargo test builder_integration
-```
-
-## Error Handling
-
-The library uses `thiserror` for comprehensive error handling:
-
-```rust
-match AsyncLogger::builder().build() {
-    Ok(logger) => {
-        logger.init();
-        // Logging operations...
-    },
-    Err(e) => {
-        eprintln!("Failed to initialize logger: {}", e);
-        // Handle initialization failure
-    }
+    nanolog_rs::info!(target: "init", "service started");
+    Ok(())
 }
 ```
 
-## Future Plans
+## 运行
 
-See [TODO.md](TODO.md) for our development roadmap including:
-- Log rotation and archiving
-- Configuration system
-- Additional output targets
-- Enhanced filtering mechanisms
+- 构建示例：`cargo build --examples`
+- 运行示例：`cargo run --example builder_example`
+- 运行测试：`cargo test`
+- 运行基准：`cargo bench`
 
-## Project Structure
+## 许可
 
-```
-nanolog-rs/
-├── benches/                 # Benchmark tests
-│   ├── benchmarks.rs
-│   └── logger_benchmark.rs
-├── examples/                # Usage examples
-│   ├── advanced_usage.rs
-│   ├── basic_usage.rs
-│   ├── builder_example.rs
-│   └── modern_builder_example.rs
-├── logs/                    # Log files (gitignored)
-│   ├── composite.log
-│   ├── example.log
-│   ├── example_modern.log
-│   └── performance.log
-├── src/                     # Source code
-│   ├── buffer.rs           # Buffer pool implementation
-│   ├── builder.rs          # AsyncLoggerBuilder implementation
-│   ├── error.rs            # Error handling
-│   ├── format.rs           # Message formatting
-│   ├── level.rs            # Log levels
-│   ├── lib.rs              # Library entry point
-│   ├── logger.rs           # Main logger implementation
-│   ├── record.rs           # Log record structures
-│   ├── sink.rs             # Output sinks
-│   └── tests/              # Internal unit tests
-├── tests/                   # Integration tests
-│   └── builder_integration_test.rs
-├── .gitignore              # Git ignore rules
-├── Cargo.lock              # Dependency lock file
-├── Cargo.toml              # Package manifest
-├── LICENSE                 # License file
-├── README.md               # English documentation
-├── README_zh.md            # Chinese documentation
-└── TODO.md                 # Development roadmap
-```
+MIT License
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a pull request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Inspired by high-performance logging systems used in financial services
-- Built with Rust's safety and performance guarantees
