@@ -5,7 +5,7 @@ use nanolog_rs::{
     buffer::{BufferPool, ByteBuffer},
 };
 use std::hint::black_box;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// 测试ByteBuffer的性能
@@ -249,12 +249,91 @@ fn bench_concurrent(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_publish_mutex_vs_concurrent(c: &mut Criterion) {
+    let mut group = c.benchmark_group("publish_mutex_vs_concurrent");
+    group.measurement_time(Duration::from_secs(5));
+    group.sample_size(10);
+
+    group.bench_function("concurrent_no_mutex", |b| {
+        b.iter(|| {
+            let logger = Arc::new(AsyncLogger::new(
+                Level::Info,
+                Arc::new(DefaultFormatter::new()),
+                Arc::new(MemorySink::new()),
+                10000,
+                100,
+                Duration::from_millis(10),
+            ));
+
+            let mut handles = vec![];
+            for _ in 0..4 {
+                let lg = logger.clone();
+                let h = std::thread::spawn(move || {
+                    for i in 0..100 {
+                        let _ = lg.log(Record::new(
+                            Level::Info,
+                            "bench::no_mutex",
+                            file!(),
+                            line!(),
+                            format!("m{}", i),
+                        ));
+                    }
+                });
+                handles.push(h);
+            }
+            for h in handles {
+                let _ = h.join();
+            }
+            let _ = logger.shutdown();
+        });
+    });
+
+    group.bench_function("with_global_mutex", |b| {
+        b.iter(|| {
+            let logger = Arc::new(AsyncLogger::new(
+                Level::Info,
+                Arc::new(DefaultFormatter::new()),
+                Arc::new(MemorySink::new()),
+                10000,
+                100,
+                Duration::from_millis(10),
+            ));
+            let gate = Arc::new(Mutex::new(()));
+
+            let mut handles = vec![];
+            for _ in 0..4 {
+                let lg = logger.clone();
+                let g = gate.clone();
+                let h = std::thread::spawn(move || {
+                    for i in 0..100 {
+                        let _lock = g.lock().unwrap_or_else(|e| e.into_inner());
+                        let _ = lg.log(Record::new(
+                            Level::Info,
+                            "bench::mutex",
+                            file!(),
+                            line!(),
+                            format!("m{}", i),
+                        ));
+                    }
+                });
+                handles.push(h);
+            }
+            for h in handles {
+                let _ = h.join();
+            }
+            let _ = logger.shutdown();
+        });
+    });
+
+    group.finish();
+}
 criterion_group!(
     benches,
     bench_byte_buffer,
     bench_buffer_pool,
     bench_logging,
     bench_formatting,
-    bench_concurrent
+    bench_concurrent,
+    bench_publish_mutex_vs_concurrent
 );
 criterion_main!(benches);
