@@ -112,15 +112,13 @@ impl AsyncLogger {
             .handle_events_with(processor)
             .build();
 
-        let prod_arc = Arc::new(Mutex::new(prod));
         let publisher = {
-            let prod_arc = Arc::clone(&prod_arc);
+            let prod_source = prod.clone();
             move |record: Record| {
-                if let Ok(mut p) = prod_arc.lock() {
-                    p.publish(|e| {
-                        e.record = record.clone();
-                    });
-                }
+                let mut p = prod_source.clone();
+                p.publish(|e| {
+                    e.record = record.clone();
+                });
             }
         };
 
@@ -399,5 +397,48 @@ mod tests {
 
         assert!(init_global_logger(logger).is_ok());
         assert!(global_logger().is_some());
+    }
+
+    #[test]
+    fn test_concurrent_publish_without_mutex() {
+        let formatter = Arc::new(DefaultFormatter::new());
+        let sink = Arc::new(crate::sink::MemorySink::new());
+        let logger = Arc::new(AsyncLogger::new(
+            Level::Info,
+            formatter,
+            sink,
+            2048,
+            64,
+            Duration::from_millis(10),
+        ));
+
+        let threads = 4;
+        let per_thread = 250;
+        let mut handles = Vec::new();
+        for _ in 0..threads {
+            let lg = logger.clone();
+            let handle = std::thread::spawn(move || {
+                for i in 0..per_thread {
+                    let _ = lg.log(Record::new(
+                        Level::Info,
+                        "test::concurrent",
+                        file!(),
+                        line!(),
+                        format!("msg {}", i),
+                    ));
+                }
+            });
+            handles.push(handle);
+        }
+        for h in handles {
+            let _ = h.join();
+        }
+
+        assert!(logger.flush().is_ok());
+        let (sent, written, lost) = logger.get_loss_stats();
+        assert_eq!(sent, threads * per_thread);
+        assert!(written >= sent);
+        assert_eq!(lost, 0);
+        assert!(logger.shutdown().is_ok());
     }
 }

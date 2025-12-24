@@ -124,17 +124,92 @@ impl AsyncLoggerBuilder {
 
     /// 使用控制台输出 (便捷方法)
     pub fn with_console_output(mut self) -> Self {
-        self.sink = Some(Arc::new(crate::sink::ConsoleSink::new()));
+        match &self.sink {
+            Some(existing) => {
+                let mut composite = crate::sink::CompositeSink::new();
+                composite.add_sink(existing.clone());
+                composite.add_sink(Arc::new(crate::sink::ConsoleSink::new()));
+                self.sink = Some(Arc::new(composite));
+            }
+            None => {
+                self.sink = Some(Arc::new(crate::sink::ConsoleSink::new()));
+            }
+        }
         self
     }
 
     /// 使用文件输出 (便捷方法)
     pub fn with_file_output<P: AsRef<Path>>(mut self, path: P) -> Self {
         match crate::sink::FileSink::new(path) {
-            Ok(sink) => self.sink = Some(Arc::new(sink)),
+            Ok(file_sink) => {
+                match &self.sink {
+                    Some(existing) => {
+                        let mut composite = crate::sink::CompositeSink::new();
+                        composite.add_sink(existing.clone());
+                        composite.add_sink(Arc::new(file_sink));
+                        self.sink = Some(Arc::new(composite));
+                    }
+                    None => {
+                        self.sink = Some(Arc::new(file_sink));
+                    }
+                }
+            }
             Err(_) => {
-                // 如果文件创建失败，则回退到控制台输出
-                self.sink = Some(Arc::new(crate::sink::ConsoleSink::new()));
+                match &self.sink {
+                    Some(existing) => {
+                        let mut composite = crate::sink::CompositeSink::new();
+                        composite.add_sink(existing.clone());
+                        composite.add_sink(Arc::new(crate::sink::ConsoleSink::new()));
+                        self.sink = Some(Arc::new(composite));
+                    }
+                    None => {
+                        self.sink = Some(Arc::new(crate::sink::ConsoleSink::new()));
+                    }
+                }
+            }
+        }
+        self
+    }
+
+    /// 使用默认HOME目录文件输出 ($HOME/.nanolog/$DATE.log)
+    pub fn with_default_home_file_output(mut self) -> Self {
+        let base = std::env::var("HOME")
+            .map(|h| std::path::PathBuf::from(h).join(".nanolog"))
+            .unwrap_or_else(|_| std::path::PathBuf::from(".nanolog"));
+        let now = time::OffsetDateTime::now_utc().date();
+        let filename = format!(
+            "{:04}-{:02}-{:02}.log",
+            now.year(),
+            now.month() as u8,
+            now.day()
+        );
+        let path = base.join(filename);
+        match crate::sink::FileSink::new(path) {
+            Ok(file_sink) => {
+                match &self.sink {
+                    Some(existing) => {
+                        let mut composite = crate::sink::CompositeSink::new();
+                        composite.add_sink(existing.clone());
+                        composite.add_sink(Arc::new(file_sink));
+                        self.sink = Some(Arc::new(composite));
+                    }
+                    None => {
+                        self.sink = Some(Arc::new(file_sink));
+                    }
+                }
+            }
+            Err(_) => {
+                match &self.sink {
+                    Some(existing) => {
+                        let mut composite = crate::sink::CompositeSink::new();
+                        composite.add_sink(existing.clone());
+                        composite.add_sink(Arc::new(crate::sink::ConsoleSink::new()));
+                        self.sink = Some(Arc::new(composite));
+                    }
+                    None => {
+                        self.sink = Some(Arc::new(crate::sink::ConsoleSink::new()));
+                    }
+                }
             }
         }
         self
