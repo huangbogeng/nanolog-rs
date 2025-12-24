@@ -20,7 +20,7 @@
 
 ```toml
 [dependencies]
-nanolog-rs = "0.1.0"
+nanolog-rs = "0.2.0"
 ```
 
 ## 快速开始
