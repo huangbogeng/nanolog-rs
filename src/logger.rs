@@ -228,6 +228,15 @@ impl Drop for AsyncLogger {
     fn drop(&mut self) {
         if !self.shutdown.load(Ordering::Acquire) {
             self.shutdown.store(true, Ordering::Release);
+            loop {
+                let sent = self.sent_count.load(Ordering::Relaxed);
+                let written = self.written_count.load(Ordering::Relaxed);
+                if written >= sent {
+                    break;
+                }
+                std::thread::yield_now();
+            }
+            let _ = self.sink.flush();
             let _ = self.sink.shutdown();
         }
     }
@@ -340,7 +349,20 @@ pub fn init_global_logger(logger: Arc<AsyncLogger>) -> Result<(), Error> {
     let global_logger = GLOBAL_LOGGER.get_or_init(GlobalLogger::new);
 
     // 调用实例的init方法来设置日志器
-    global_logger.init(logger)
+    let result = global_logger.init(logger);
+
+    // 注册panic钩子，确保异常退出时仍尽力刷写缓冲区
+    static PANIC_HOOK_INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    let _ = PANIC_HOOK_INSTALLED.get_or_init(|| {
+        std::panic::set_hook(Box::new(|_info| {
+            if let Some(gl) = crate::global_logger() {
+                let _ = gl.flush().ok();
+                let _ = gl.shutdown().ok();
+            }
+        }));
+    });
+
+    result
 }
 
 /// 获取全局日志器

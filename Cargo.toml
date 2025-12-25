@@ -38,6 +38,7 @@ log = { version = "0.4.29", features = ["std"] }
 disruptor = "3.7.0"
 time = "0.3.44"
 chrono = { version = "0.4.42", default-features = false, features = ["alloc"] }
+ctrlc = "3.4.4"
 
 [dev-dependencies]
 criterion = "0.8.0"
