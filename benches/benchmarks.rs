@@ -12,7 +12,7 @@ use std::time::Duration;
 fn bench_byte_buffer(c: &mut Criterion) {
     let mut group = c.benchmark_group("byte_buffer");
     group.measurement_time(Duration::from_secs(5)); // 设置最大测量时间为5秒
-    group.sample_size(10); // 减少样本数量以加快测试
+    group.sample_size(100); // 减少样本数量以加快测试
 
     group.bench_function("new", |b| {
         b.iter(|| {
@@ -45,7 +45,7 @@ fn bench_byte_buffer(c: &mut Criterion) {
 fn bench_buffer_pool(c: &mut Criterion) {
     let mut group = c.benchmark_group("buffer_pool");
     group.measurement_time(Duration::from_secs(5)); // 设置最大测量时间为5秒
-    group.sample_size(10); // 减少样本数量以加快测试
+    group.sample_size(100); // 减少样本数量以加快测试
 
     group.bench_function("acquire_release", |b| {
         let pool = BufferPool::new(100, 1000);
@@ -83,7 +83,7 @@ fn bench_buffer_pool(c: &mut Criterion) {
 fn bench_logging(c: &mut Criterion) {
     let mut group = c.benchmark_group("logging");
     group.measurement_time(Duration::from_secs(5)); // 设置最大测量时间为5秒
-    group.sample_size(10); // 减少样本数量以加快测试
+    group.sample_size(100); // 减少样本数量以加快测试
 
     group.bench_function("record_creation", |b| {
         b.iter(|| {
@@ -157,7 +157,7 @@ fn bench_logging(c: &mut Criterion) {
 fn bench_formatting(c: &mut Criterion) {
     let mut group = c.benchmark_group("formatting");
     group.measurement_time(Duration::from_secs(5)); // 设置最大测量时间为5秒
-    group.sample_size(10); // 减少样本数量以加快测试
+    group.sample_size(100); // 减少样本数量以加快测试
 
     let formatter = DefaultFormatter::new();
     let record = Record::new(
@@ -203,7 +203,7 @@ fn bench_formatting(c: &mut Criterion) {
 fn bench_concurrent(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent");
     group.measurement_time(Duration::from_secs(5)); // 设置最大测量时间为5秒
-    group.sample_size(10); // 减少样本数量以加快测试
+    group.sample_size(100); // 减少样本数量以加快测试
 
     group.bench_function("multi_thread_logging", |b| {
         let logger = Arc::new(AsyncLogger::new(
@@ -252,7 +252,7 @@ fn bench_concurrent(c: &mut Criterion) {
 fn bench_publish_mutex_vs_concurrent(c: &mut Criterion) {
     let mut group = c.benchmark_group("publish_mutex_vs_concurrent");
     group.measurement_time(Duration::from_secs(5));
-    group.sample_size(10);
+    group.sample_size(100);
 
     group.bench_function("concurrent_no_mutex", |b| {
         b.iter(|| {
