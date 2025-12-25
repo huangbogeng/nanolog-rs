@@ -20,7 +20,7 @@
 
 ```toml
 [dependencies]
-nanolog-rs = "0.2.0"
+nanolog-rs = "0.2.1"
 ```
 
 ## 快速开始
@@ -92,16 +92,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use nanolog_rs::{AsyncLoggerBuilder, Level, init_global_logger};
 use std::sync::Arc;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), nanolog_rs::error::Error> {
     let logger = AsyncLoggerBuilder::new()
         .level(Level::Trace)
         .with_file_output("logs/macro.log")
+        .with_console_output()
         .build()?;
     init_global_logger(Arc::new(logger))?;
 
     nanolog_rs::info!(target: "init", "service started");
+    if let Some(gl) = nanolog_rs::global_logger() {
+        gl.flush()?;
+        gl.shutdown()?;
+    }
     Ok(())
 }
+```
+
+## 安全退出
+
+- 短生命周期程序：发布日志后显式调用 `flush()` 与 `shutdown()`，确保缓冲区写出并关闭输出目标
+- 长生命周期服务：在退出路径（如 SIGINT/SIGTERM 信号处理器）调用 `shutdown()`，避免在业务线程中阻塞
+- panic 钩子：库在初始化全局日志器时已注册 panic 钩子，异常退出时尽力 `flush + shutdown`
+- 注意：`SIGKILL` 无法保证清理；这是所有进程的通用限制
+
+示例（最小安全退出）：`examples/safe_shutdown.rs`
+
+```bash
+cargo run --example safe_shutdown
 ```
 
 ## 时间戳配置
@@ -159,6 +177,7 @@ let logger = AsyncLogger::builder()
 
 - 构建示例：`cargo build --examples`
 - 运行示例：`cargo run --example builder_example`
+- 运行安全退出示例：`cargo run --example safe_shutdown`
 - 运行测试：`cargo test`
 - 运行基准：`cargo bench`
 
